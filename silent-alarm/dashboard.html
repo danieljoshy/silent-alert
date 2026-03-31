@@ -1,0 +1,347 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Silent Alarm – Live Dashboard</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700;900&display=swap" rel="stylesheet"/>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg:        #0b0f1a;
+    --card:      #131929;
+    --border:    #1e2d4a;
+    --accent:    #00c6ff;
+    --green:     #00e676;
+    --red:       #ff1744;
+    --orange:    #ff6d00;
+    --text:      #e0eaff;
+    --muted:     #6b7fa3;
+  }
+
+  body {
+    font-family: 'Inter', sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  /* ── Scanline overlay ── */
+  body::before {
+    content: '';
+    position: fixed; inset: 0;
+    background: repeating-linear-gradient(
+      0deg, transparent, transparent 2px,
+      rgba(0,0,0,.07) 2px, rgba(0,0,0,.07) 4px
+    );
+    pointer-events: none; z-index: 9999;
+  }
+
+  /* ── Header ── */
+  header {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 18px 36px;
+    background: rgba(13,19,35,.9);
+    border-bottom: 1px solid var(--border);
+    backdrop-filter: blur(10px);
+    position: sticky; top: 0; z-index: 100;
+  }
+  .logo { display: flex; align-items: center; gap: 12px; }
+  .logo-icon {
+    width: 40px; height: 40px; border-radius: 10px;
+    background: linear-gradient(135deg,#00c6ff,#0072ff);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 20px;
+  }
+  .logo h1 { font-size: 1.2rem; font-weight: 700; letter-spacing: .5px; }
+  .logo span { font-size: .75rem; color: var(--muted); display: block; }
+  .status-dot {
+    display: flex; align-items: center; gap: 8px;
+    font-size: .85rem; color: var(--muted);
+  }
+  .dot {
+    width: 10px; height: 10px; border-radius: 50%;
+    background: var(--green);
+    box-shadow: 0 0 8px var(--green);
+    animation: pulse 1.4s infinite;
+  }
+  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.4} }
+
+  /* ── Main grid ── */
+  main { padding: 32px 36px; max-width: 1400px; margin: 0 auto; }
+
+  /* ── Alert hero card ── */
+  #alertCard {
+    border-radius: 20px;
+    border: 1px solid var(--border);
+    background: var(--card);
+    padding: 36px 40px;
+    margin-bottom: 28px;
+    transition: border-color .3s, box-shadow .3s;
+    position: relative; overflow: hidden;
+  }
+  #alertCard.critical {
+    border-color: var(--red);
+    box-shadow: 0 0 40px rgba(255,23,68,.25);
+    animation: flashBorder 1s infinite;
+  }
+  @keyframes flashBorder {
+    0%,100% { box-shadow: 0 0 40px rgba(255,23,68,.25); }
+    50%      { box-shadow: 0 0 80px rgba(255,23,68,.55); }
+  }
+  #alertCard.normal { border-color: var(--green); box-shadow: 0 0 20px rgba(0,230,118,.1); }
+
+  .card-inner { display: flex; align-items: center; gap: 28px; flex-wrap: wrap; }
+  .alert-icon { font-size: 4rem; line-height: 1; }
+  .alert-body { flex: 1; }
+  .alert-status {
+    font-size: 2.5rem; font-weight: 900; letter-spacing: 1px;
+    text-transform: uppercase;
+  }
+  .alert-status.critical { color: var(--red); }
+  .alert-status.normal   { color: var(--green); }
+  .alert-threat { font-size: 1.1rem; color: var(--muted); margin: 4px 0 12px; }
+  .alert-action {
+    background: rgba(255,255,255,.05);
+    border-left: 3px solid var(--accent);
+    padding: 10px 16px; border-radius: 6px;
+    font-size: .9rem; color: var(--text);
+  }
+  .alert-meta {
+    display: flex; flex-direction: column; gap: 8px;
+    align-items: flex-end; min-width: 160px;
+  }
+  .badge {
+    background: rgba(255,255,255,.07);
+    border: 1px solid var(--border);
+    border-radius: 8px; padding: 6px 14px;
+    font-size: .8rem; color: var(--muted);
+    text-align: center;
+  }
+  .badge strong { display: block; font-size: 1.2rem; color: var(--text); }
+
+  /* ── Confidence bar ── */
+  .conf-bar-bg {
+    width: 100%; height: 8px; border-radius: 4px;
+    background: rgba(255,255,255,.08); margin-top: 16px; overflow: hidden;
+  }
+  .conf-bar { height: 100%; border-radius: 4px; transition: width .6s ease, background .3s; }
+
+  /* ── Stats row ── */
+  .stats { display: grid; grid-template-columns: repeat(auto-fit,minmax(160px,1fr)); gap: 16px; margin-bottom: 28px; }
+  .stat-card {
+    background: var(--card); border: 1px solid var(--border);
+    border-radius: 14px; padding: 20px; text-align: center;
+  }
+  .stat-card .num { font-size: 2rem; font-weight: 900; color: var(--accent); }
+  .stat-card .lbl { font-size: .75rem; color: var(--muted); margin-top: 4px; }
+
+  /* ── History table ── */
+  .section-title {
+    font-size: .75rem; font-weight: 700; letter-spacing: 2px;
+    text-transform: uppercase; color: var(--muted); margin-bottom: 14px;
+  }
+  #historyList { display: flex; flex-direction: column; gap: 10px; }
+  .hist-item {
+    background: var(--card); border: 1px solid var(--border);
+    border-radius: 12px; padding: 14px 20px;
+    display: flex; align-items: center; gap: 16px; flex-wrap: wrap;
+  }
+  .hist-tag {
+    background: rgba(255,23,68,.15); color: var(--red);
+    border: 1px solid rgba(255,23,68,.3);
+    border-radius: 6px; padding: 3px 10px; font-size: .75rem; font-weight: 700;
+    white-space: nowrap;
+  }
+  .hist-info { flex: 1; font-size: .85rem; }
+  .hist-info strong { color: var(--text); }
+  .hist-info span   { color: var(--muted); font-size: .78rem; margin-left: 8px; }
+  .hist-time { font-size: .75rem; color: var(--muted); white-space: nowrap; }
+  .empty-state { text-align: center; color: var(--muted); padding: 40px; font-size: .9rem; }
+
+  /* ── Flash overlay ── */
+  #flashOverlay {
+    position: fixed; inset: 0;
+    background: rgba(255,23,68,.18);
+    pointer-events: none; z-index: 9998;
+    opacity: 0; transition: opacity .15s;
+  }
+  #flashOverlay.show { opacity: 1; }
+
+  /* ── Responsive ── */
+  @media(max-width:600px) {
+    main { padding: 20px 16px; }
+    header { padding: 14px 16px; }
+    .alert-status { font-size: 1.8rem; }
+  }
+</style>
+</head>
+<body>
+
+<div id="flashOverlay"></div>
+
+<header>
+  <div class="logo">
+    <div class="logo-icon">🔒</div>
+    <div>
+      <h1>Silent Alarm</h1>
+      <span>AI Threat Detection Dashboard</span>
+    </div>
+  </div>
+  <div class="status-dot"><div class="dot"></div> Live Monitoring</div>
+</header>
+
+<main>
+
+  <!-- ── Hero alert card ── -->
+  <div id="alertCard" class="normal">
+    <div class="card-inner">
+      <div class="alert-icon" id="alertIcon">✅</div>
+      <div class="alert-body">
+        <div class="alert-status normal" id="alertStatus">SYSTEM NORMAL</div>
+        <div class="alert-threat" id="alertThreat">No threats detected</div>
+        <div class="alert-action" id="alertAction">All cameras operating normally</div>
+        <div class="conf-bar-bg">
+          <div class="conf-bar" id="confBar" style="width:0%;background:var(--green)"></div>
+        </div>
+      </div>
+      <div class="alert-meta">
+        <div class="badge">Camera<strong id="alertCamera">—</strong></div>
+        <div class="badge">Confidence<strong id="alertConf">—</strong></div>
+        <div class="badge">Last update<strong id="alertTime">—</strong></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Stats ── -->
+  <div class="stats">
+    <div class="stat-card"><div class="num" id="statTotal">0</div><div class="lbl">Total Alerts</div></div>
+    <div class="stat-card"><div class="num" id="statFire">0</div><div class="lbl">🔥 Fire</div></div>
+    <div class="stat-card"><div class="num" id="statMedical">0</div><div class="lbl">🏥 Medical</div></div>
+    <div class="stat-card"><div class="num" id="statWeapon">0</div><div class="lbl">🔫 Weapon / Crowd</div></div>
+  </div>
+
+  <!-- ── History ── -->
+  <div class="section-title">Recent Critical Events</div>
+  <div id="historyList"><div class="empty-state">No critical events yet — system is monitoring…</div></div>
+
+</main>
+
+<script>
+  let prevStatus = "normal";
+  let statCounts = { total:0, fire:0, medical:0, other:0 };
+  let flashTimer = null;
+
+  const card     = document.getElementById("alertCard");
+  const overlay  = document.getElementById("flashOverlay");
+
+  function timeFmt(iso) {
+    if (!iso) return "—";
+    const d = new Date(iso);
+    return d.toLocaleTimeString([], {hour:"2-digit",minute:"2-digit",second:"2-digit"});
+  }
+
+  function iconFor(threat) {
+    const t = (threat||"").toLowerCase();
+    if (t.includes("fire"))    return "🔥";
+    if (t.includes("medical") || t.includes("heart")) return "🚑";
+    if (t.includes("weapon"))  return "🔫";
+    if (t.includes("crowd"))   return "👥";
+    return "⚠️";
+  }
+
+  function setFlash() {
+    overlay.classList.add("show");
+    clearTimeout(flashTimer);
+    flashTimer = setTimeout(()=>overlay.classList.remove("show"), 300);
+    setTimeout(setFlash, 600);   // keep flashing while critical
+  }
+  let flashInterval = null;
+
+  async function fetchAlert() {
+    try {
+      const res  = await fetch("/alert");
+      const data = await res.json();
+
+      const isCrit = (data.status||"").toLowerCase() === "critical";
+      const conf   = parseInt(data.confidence) || 0;
+
+      // ── Update hero card ──────────────────────────────────────────────────
+      document.getElementById("alertIcon").textContent   = isCrit ? iconFor(data.threat_type) : "✅";
+      document.getElementById("alertStatus").textContent = isCrit ? "🚨 " + (data.threat_type||"THREAT") + " DETECTED" : "SYSTEM NORMAL";
+      document.getElementById("alertStatus").className   = "alert-status " + (isCrit ? "critical" : "normal");
+      document.getElementById("alertThreat").textContent = isCrit ? `Threat: ${data.threat_type}` : "No threats detected";
+      document.getElementById("alertAction").textContent = data.recommended_action || "All clear";
+      document.getElementById("alertCamera").textContent = data.camera || "—";
+      document.getElementById("alertConf").textContent   = isCrit ? conf + "%" : "—";
+      document.getElementById("alertTime").textContent   = timeFmt(data.timestamp);
+
+      const bar = document.getElementById("confBar");
+      bar.style.width      = isCrit ? conf + "%" : "0%";
+      bar.style.background = conf > 80 ? "var(--red)" : conf > 50 ? "var(--orange)" : "var(--green)";
+
+      card.className = isCrit ? "critical" : "normal";
+
+      // ── Flash on new critical ─────────────────────────────────────────────
+      if (isCrit && prevStatus !== "critical") {
+        clearInterval(flashInterval);
+        let flashes = 0;
+        flashInterval = setInterval(()=>{
+          overlay.classList.toggle("show");
+          if (++flashes > 8) { clearInterval(flashInterval); overlay.classList.remove("show"); }
+        }, 200);
+
+        // Update counters
+        statCounts.total++;
+        const t = (data.threat_type||"").toLowerCase();
+        if (t.includes("fire"))                          statCounts.fire++;
+        else if (t.includes("medical")||t.includes("heart")) statCounts.medical++;
+        else                                             statCounts.other++;
+
+        document.getElementById("statTotal").textContent  = statCounts.total;
+        document.getElementById("statFire").textContent   = statCounts.fire;
+        document.getElementById("statMedical").textContent= statCounts.medical;
+        document.getElementById("statWeapon").textContent = statCounts.other;
+      }
+
+      prevStatus = isCrit ? "critical" : "normal";
+
+    } catch(e) {
+      console.warn("API not reachable", e);
+    }
+  }
+
+  async function fetchHistory() {
+    try {
+      const res  = await fetch("/history");
+      const data = await res.json();
+      const list = document.getElementById("historyList");
+
+      if (!data.length) {
+        list.innerHTML = '<div class="empty-state">No critical events yet — system is monitoring…</div>';
+        return;
+      }
+
+      list.innerHTML = data.map(d => `
+        <div class="hist-item">
+          <span class="hist-tag">${d.threat_type||"THREAT"}</span>
+          <div class="hist-info">
+            <strong>${d.recommended_action||"Take action"}</strong>
+            <span>Camera: ${d.camera||"—"} · Confidence: ${d.confidence||"?"}%</span>
+          </div>
+          <div class="hist-time">${timeFmt(d.timestamp)}</div>
+        </div>
+      `).join("");
+    } catch(e) {}
+  }
+
+  // Poll every 2 seconds
+  fetchAlert();
+  fetchHistory();
+  setInterval(fetchAlert,   2000);
+  setInterval(fetchHistory, 5000);
+</script>
+</body>
+</html>
